@@ -4,13 +4,14 @@ import br.zul.websocket.exception.ZWebSocketException;
 import br.zul.websocket.exception.ZWebSocketHostInvalidException;
 import br.zul.websocket.exception.ZWebSocketProtocolInvalidException;
 import br.zul.websocket.listener.ZWebSocketMessageListener;
+import br.zul.websocket.model.ZWebSocketProxy;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.TreeMap;
 
 /**
  *
@@ -25,13 +26,15 @@ public class ZWebSocketBuilder {
     private List<ZWebSocketMessageListener> messageListenerList;
     
     private Map<String, List<String>> requestPropertyMap;
+    private boolean printHeaders;
+    private ZWebSocketProxy proxy;
     
     //==========================================================================
     //CONSTRUTORES
     //==========================================================================
     public ZWebSocketBuilder(){
         this.messageListenerList = new ArrayList<>();
-        this.requestPropertyMap = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        this.requestPropertyMap = new LinkedHashMap<>();
         initDefaultRequestProperties();
     }
     
@@ -86,6 +89,8 @@ public class ZWebSocketBuilder {
         socket.url = url;
         socket.messageListenerList = messageListenerList;
         socket.requestPropertyMap = requestPropertyMap;
+        socket.printHeaders = printHeaders;
+        socket.proxy = proxy;
         socket.connect();
         return socket;
     }
@@ -109,4 +114,21 @@ public class ZWebSocketBuilder {
         return this;
     }
 
+    public boolean isPrintHeaders() {
+        return printHeaders;
+    }
+    public ZWebSocketBuilder setPrintHeaders(boolean printHeaders) {
+        this.printHeaders = printHeaders;
+        return this;
+    }
+
+    public ZWebSocketProxy getProxy() {
+        return proxy;
+    }
+
+    public ZWebSocketBuilder setProxy(ZWebSocketProxy proxy) {
+        this.proxy = proxy;
+        return this;
+    }
+    
 }

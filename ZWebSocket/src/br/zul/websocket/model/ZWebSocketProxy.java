@@ -1,45 +1,41 @@
 package br.zul.websocket.model;
 
-import br.zul.websocket.client.ZWebSocket;
-
 
 /**
  *
  * @author luizh
  */
-public class ZWebSocketMessage {
+public class ZWebSocketProxy {
 
     //==========================================================================
     //VARIÁVEIS
     //==========================================================================
-    protected byte[] decodedData;
-    protected byte[] encodedData;
-    protected ZWebSocket socket;
+    private String host;
+    private int port;
     
     //==========================================================================
     //CONSTRUTORES
     //==========================================================================
-    protected ZWebSocketMessage() {
-        
+    public ZWebSocketProxy(String host, int port) {
+        this.host = host;
+        this.port = port;
     }
     
     //==========================================================================
     //GETTERS E SETTERS
     //==========================================================================
-    public ZWebSocket getSocket() {
-        return socket;
+    public String getHost() {
+        return host;
     }
-    
-    public String getText(){
-        return new String(decodedData);
-    }
-    
-    public byte[] getDecodedData() {
-        return decodedData;
+    public void setHost(String host) {
+        this.host = host;
     }
 
-    public byte[] getEncodedData() {
-        return encodedData;
+    public int getPort() {
+        return port;
+    }
+    public void setPort(int port) {
+        this.port = port;
     }
     
 }

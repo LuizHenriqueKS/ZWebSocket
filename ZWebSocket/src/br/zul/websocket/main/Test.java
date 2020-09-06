@@ -16,6 +16,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.Scanner;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
@@ -33,7 +35,8 @@ class Test {
                                         .setUrl(url)
                                         .addMessageListener(Test::printMessage)
                                         .build();
-        webSocket.sendMessage("Hello world");
+        webSocket.readMessage();
+        webSocket.sendMessage("Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!");
     }
     
     public static void connectToWssSrver() throws IOException{
@@ -45,11 +48,13 @@ class Test {
     }
     
     public static void startServerWsSimples() throws IOException, NoSuchAlgorithmException {
-        ServerSocket server = new ServerSocket(3000);
+        ServerSocket server = new ServerSocket(3003);
         Socket socket;
         while ((socket = server.accept())!=null){
             InputStream is = socket.getInputStream();
-            String key = new StrHelper(readString(is)).from("Sec-WebSocket-Key: ").till("\n").toString().trim();
+            String headers = readString(is);
+            System.out.println(headers);
+            String key = new StrHelper(headers).from("Sec-WebSocket-Key: ").till("\n").toString().trim();
             String accept = sha1(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11");  
             OutputStream os = socket.getOutputStream();
             StringBuilder responseBuilder = new StringBuilder();
@@ -58,6 +63,7 @@ class Test {
             responseBuilder.append("Connection: Upgrade\n");
             responseBuilder.append("Sec-WebSocket-Accept: ").append(accept).append("\n\n");
             os.write(responseBuilder.toString().getBytes());
+            //os.write(new byte[]{-120, 2, 3, -22});
             redirectToConsole(socket.getInputStream());
         }
     }
@@ -103,6 +109,42 @@ class Test {
 	digest.reset();
 	digest.update(str.getBytes());
         return Base64.getEncoder().encodeToString(digest.digest());
+    }
+
+    static void startTunnel() throws IOException {
+        ServerSocket server = new ServerSocket(3003);
+        Socket client = server.accept();
+        Socket socket = new Socket("agentcore.omnize.com.br", 80);
+        redirect("clinet>server", client.getInputStream(), socket.getOutputStream());
+        redirect("server>client", socket.getInputStream(), client.getOutputStream());
+    }
+
+    private static void redirect(String name, InputStream inputStream, OutputStream outputStream) {
+        new Thread(()->{
+            try {
+                byte buffer[] = new byte[10000];
+                int len;
+                boolean first = true;
+                while ((len=inputStream.read(buffer))!=-1){
+                    String data = new String(buffer, 0, len);
+                    System.out.printf("%s: %s\r\n", name, data);
+                    if (first) {
+                        outputStream.write(data.replace("localhost:3003", "agentcore.omnize.com.br").getBytes());
+                    } else { 
+                        for (int i=0;i<len;i++){
+                            System.out.printf("%d|", buffer[i]);
+                        }
+                        System.out.println("");
+                        outputStream.write(buffer, 0, len);
+                    }
+                    outputStream.flush();
+                    first = false;
+                }
+                System.out.println("Fim: " + name);
+            } catch (IOException ex) {
+                Logger.getLogger(Test.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }).start();
     }
 
 }

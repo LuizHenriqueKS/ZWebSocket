@@ -30,7 +30,7 @@ public class MemoryStream {
 
     public void write2Bytes(int i) {
         write1Byte(i >>> 8);
-        write1Byte(i);
+        write1Byte(i % 256);
     }
 
     public void write8Bytes(int i) {
@@ -41,11 +41,11 @@ public class MemoryStream {
         write1Byte(i >>> 24);
         write1Byte(i >>> 16);
         write1Byte(i >>> 8);
-        write1Byte(i);
+        write1Byte(i % 256);
     }
 
     public void writeBytes(byte[] bytes) throws IOException {
-        stream.write(bytes);
+        if (bytes.length>0) stream.write(bytes);
     }
 
     public byte[] toByteArray() {

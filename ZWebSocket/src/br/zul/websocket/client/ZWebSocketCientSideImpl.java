@@ -6,6 +6,7 @@ import br.zul.websocket.exception.ZWebSocketHostInvalidException;
 import br.zul.websocket.exception.ZWebSocketProtocolInvalidException;
 import br.zul.websocket.listener.ZWebSocketMessageListener;
 import br.zul.websocket.model.ZWebSocketMessage;
+import br.zul.websocket.model.ZWebSocketProxy;
 import br.zul.websocket.reader.ZWebSocketServerMessageReader;
 import br.zul.websocket.util.MemoryStream;
 import br.zul.websocket.util.StrHelper;
@@ -19,11 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
-import static jdk.nashorn.internal.objects.ArrayBufferView.buffer;
 
 /**
  *
@@ -45,6 +42,7 @@ class ZWebSocketCientSideImpl implements ZWebSocket {
     protected String url;
     protected List<ZWebSocketMessageListener> messageListenerList;
     protected Map<String, List<String>> requestPropertyMap;
+    protected ZWebSocketProxy proxy;
     
     protected Socket socket;
     protected InputStream inputStream;
@@ -52,6 +50,9 @@ class ZWebSocketCientSideImpl implements ZWebSocket {
     protected Thread messageListenerThread;
     protected boolean alreadyStarted;
     protected boolean connected;
+    protected boolean printHeaders;
+    
+    protected ZWebSocketServerMessageReader reader;
     
     //==========================================================================
     //CONSTRUTORES
@@ -65,35 +66,14 @@ class ZWebSocketCientSideImpl implements ZWebSocket {
     //==========================================================================
     @Override
     public synchronized ZWebSocket sendMessage(String data) throws IOException {
-        MemoryStream stream = new MemoryStream();
-        byte[] dataDecoded = data.getBytes();
-        int length = dataDecoded.length;
-        stream.write1Byte(129);
-        if (length<=125){
-            stream.write1Byte(length - 128);
-        } else if (length<255*255) {
-            stream.write1Byte(126);
-            stream.write2Bytes(length);
-        } else { 
-            stream.write1Byte(127);
-            stream.write8Bytes(length);
-        }
-        byte[] key = generateByteArray(4);
-        stream.writeBytes(key);
-        for (int i=0;i<dataDecoded.length;i++){
-            stream.write1Byte((byte) (dataDecoded[i] ^ (key[i % 4])));
-        }
-        stream.write1Byte(0);
-        outputStream.write(stream.toByteArray());
-        outputStream.flush();
+        sendData(129, data.getBytes(), new byte[]{});
         return this;
     }
     
     @Override
     public void close() throws IOException{
         connected = false;
-        stopMessageListenerThread();
-        socket.close();
+        if (socket!=null) socket.close();
         socket = null;
         inputStream = null;
         outputStream = null;
@@ -121,9 +101,40 @@ class ZWebSocketCientSideImpl implements ZWebSocket {
         alreadyStarted = true;
         connectSocket();
         sendClientHeaders();
+        //((SSLSocket)socket).startHandshake();
         readServerHeaders();
-        startMessageListenerThread();
+        reader = new ZWebSocketServerMessageReader(this, inputStream);
         connected = true;
+    }
+    
+    @Override
+    public ZWebSocketMessage readMessage() throws IOException {
+        try {
+            while (isConnected()) {
+                ZWebSocketMessage message = reader.read();
+                if (isPing(message)) {
+                    sendPong(message);
+                } else {
+                    fireMessageListeners(message);
+                    return message;
+                }
+            }
+        } catch (IOException ex) {
+            closeNoException();
+            throw ex;
+        }
+        throw new IOException("closed");
+    }
+
+    @Override
+    public void autoReadMessage() throws IOException {
+        try {
+            while (isConnected()) {
+                readMessage();
+            }
+        } finally {
+            closeNoException();
+        }
     }
     
     //==========================================================================
@@ -151,11 +162,12 @@ class ZWebSocketCientSideImpl implements ZWebSocket {
 
     private void connectSocket() throws ZWebSocketProtocolInvalidException, IOException {
         validateProtocol();
+        String host = proxy==null?getHost():proxy.getHost();
+        Integer port = proxy==null?getPort():proxy.getPort();
         if (getProtocol().equalsIgnoreCase(PROTOCOL_WS)){
-            socket = new Socket(getHost(), getPort());
+            socket = new Socket(host, port);
         } else {
-            socket = SSLSocketFactory.getDefault().createSocket(getHost(), getPort());
-            ((SSLSocket)socket).startHandshake();
+            socket = SSLSocketFactory.getDefault().createSocket(host, port);
         }
         inputStream = socket.getInputStream();
         outputStream = socket.getOutputStream();
@@ -164,7 +176,11 @@ class ZWebSocketCientSideImpl implements ZWebSocket {
     private void sendClientHeaders() throws IOException {
         StringBuilder headersBuilder = new StringBuilder();
         headersBuilder.append("GET ").append(getPath()).append(" HTTP/1.1\r\n");
-        headersBuilder.append("Host: ").append(getHost()).append(":").append(getPort()).append("\r\n");
+        if (isDefaultPort()){
+            headersBuilder.append("Host: ").append(getHost()).append("\r\n");
+        } else {
+            headersBuilder.append("Host: ").append(getHost()).append(":").append(getPort()).append("\r\n");
+        }
         requestPropertyMap.forEach((key, valList)->{
             valList.forEach(val->{
                headersBuilder.append(key).append(": ").append(val).append("\r\n");
@@ -176,8 +192,8 @@ class ZWebSocketCientSideImpl implements ZWebSocket {
         }*/
         headersBuilder.append("Sec-WebSocket-Key: ").append(getSecWebSocketKey()).append("\r\n");
         headersBuilder.append("\r\n");
-        System.out.println(headersBuilder.toString());
-        send(headersBuilder.toString().replace("\r\n", "\n"));
+        if (printHeaders) System.out.println(headersBuilder.toString());
+        send(headersBuilder.toString()/*.replace("\r\n", "\n")*/);
     }
 
     private void readServerHeaders() throws IOException {
@@ -188,31 +204,7 @@ class ZWebSocketCientSideImpl implements ZWebSocket {
             headersBuilder.append(new String(buffer, 0, len));
             if (headersBuilder.toString().replace("\r\n", "\n").endsWith("\n\n")) break;
         }
-        System.out.println(headersBuilder.toString());
-    }
-
-    private void startMessageListenerThread() {
-        messageListenerThread = new Thread(()->{
-            try {
-                ZWebSocketServerMessageReader reader = new ZWebSocketServerMessageReader(this, inputStream);
-                while (isConnected()) {
-                   ZWebSocketMessage message = reader.read();
-                   fireMessageListeners(message);
-                }
-            } catch (IOException ex) {
-                Logger.getLogger(ZWebSocketCientSideImpl.class.getName()).log(Level.SEVERE, null, ex);
-            } finally {
-                closeNoException();
-            }
-        });
-        messageListenerThread.start();
-    }
-    
-    private void stopMessageListenerThread() {
-        if (messageListenerThread!=null){
-            messageListenerThread.interrupt();
-            messageListenerThread = null;
-        }
+        if (printHeaders) System.out.println(headersBuilder.toString());
     }
 
     private void closeNoException() {
@@ -225,6 +217,38 @@ class ZWebSocketCientSideImpl implements ZWebSocket {
     
     private void send(String str) throws IOException {
         outputStream.write(str.getBytes());
+    }
+
+    private void sendData(int type, byte[] data, byte[] end) throws IOException {
+        MemoryStream stream = new MemoryStream();
+        byte[] dataDecoded = data;
+        int length = dataDecoded.length;
+        stream.write1Byte(type);
+        if (length<=125){
+            stream.write1Byte(length - 128);
+        } else if (length<256*256) {
+            stream.write1Byte(126 - 128);
+            stream.write2Bytes(length);
+        } else { 
+            stream.write1Byte(127 - 128);
+            stream.write8Bytes(length);
+        }
+        byte[] key = generateByteArray(4);
+        stream.writeBytes(key);
+        for (int i=0;i<dataDecoded.length;i++){
+            stream.write1Byte((byte) (dataDecoded[i] ^ (key[i % 4])));
+        }
+        if (end!=null) stream.writeBytes(end);
+        outputStream.write(stream.toByteArray());
+        outputStream.flush();
+    }
+
+    private boolean isPing(ZWebSocketMessage message) {
+        return message.getEncodedData()[0] == -120;
+    }
+
+    private void sendPong(ZWebSocketMessage message) throws IOException {
+        sendData(-120, message.getDecodedData(), null);
     }
     
     //==========================================================================
@@ -275,6 +299,16 @@ class ZWebSocketCientSideImpl implements ZWebSocket {
         random.nextBytes(array);
         return array;
     }
+
+    private boolean isDefaultPort() {
+        if (getPort()==80&&getProtocol().equalsIgnoreCase(PROTOCOL_WS)){
+            return true;
+        } else if (getPort()==443&&getProtocol().equalsIgnoreCase(PROTOCOL_WSS)){
+            return true;
+        } else {
+            return false;
+        }
+    }
     
     //==========================================================================
     //GETTERS E SETTERS
@@ -292,5 +326,5 @@ class ZWebSocketCientSideImpl implements ZWebSocket {
     public boolean isConnected() {
         return connected;
     }
-
+    
 }

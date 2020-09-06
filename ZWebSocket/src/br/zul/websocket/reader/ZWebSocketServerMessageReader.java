@@ -3,6 +3,7 @@ package br.zul.websocket.reader;
 import br.zul.websocket.client.ZWebSocket;
 import br.zul.websocket.model.ZWebSocketMessage;
 import br.zul.websocket.model.ZWebSocketMessageBuilder;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
@@ -30,10 +31,13 @@ public class ZWebSocketServerMessageReader {
     //MÉTODOS PÚBLICOS
     //==========================================================================
     public ZWebSocketMessage read() throws IOException{
-        int length  = readLength();
+        ByteArrayOutputStream memoryStream = new ByteArrayOutputStream();
+        int length  = readLength(memoryStream);
         byte[] dataBytes = readBytes(length);
+        memoryStream.write(dataBytes);
         return new ZWebSocketMessageBuilder()
-                            .setData(dataBytes)
+                            .setEncodedData(memoryStream.toByteArray())
+                            .setDecodedData(dataBytes)
                             .setSocket(socket)
                             .build();
     }
@@ -48,22 +52,14 @@ public class ZWebSocketServerMessageReader {
         throw new IOException("end inputstream");
     }
 
-    private int parseLength(byte[] lengthBytes) {
-        int length = 0;
-        for (int i=0;i<lengthBytes.length;i++){
-            int value = lengthBytes[i];
-            if (value==-127) value = 0;
-            length += value * Math.pow(125, lengthBytes.length - 1 - i);
-        }
-        return length;
-    }
-
-    private int readLength() throws IOException {
+    private int readLength(ByteArrayOutputStream memoryStream) throws IOException {
         byte[] start = readBytes(2);
+        memoryStream.write(start);
         switch (start[1]) {
             case 127:
             {
-                byte[] lengthBytes = readBytes(2);
+                byte[] lengthBytes = readBytes(8);
+                memoryStream.write(lengthBytes);
                 return (lengthBytes[0]<< 24)&0xff000000|
                         (lengthBytes[0]<< 16)&0x00ff0000|
                         (lengthBytes[0]<< 8)&0x0000ff00|
@@ -72,6 +68,7 @@ public class ZWebSocketServerMessageReader {
             case 126:
             {
                 byte[] lengthBytes = readBytes(2);
+                memoryStream.write(lengthBytes);
                 return (lengthBytes[0]<< 8)&0x0000ff00|
                         (lengthBytes[1])&0x000000ff;
             }

@@ -13,7 +13,8 @@ public class ZWebSocketMessageBuilder {
     //VARIÁVEIS
     //==========================================================================
     private ZWebSocket socket;
-    private byte[] data;
+    private byte[] decodedData;
+    private byte[] encodedData;
     
     //==========================================================================
     //CONSTRUTORES
@@ -35,12 +36,13 @@ public class ZWebSocketMessageBuilder {
     //==========================================================================
     private void validate() {
         Objects.requireNonNull(socket);
-        Objects.requireNonNull(data);
+        Objects.requireNonNull(decodedData);
     }
 
     private ZWebSocketMessage implement() {
         ZWebSocketMessage message = new ZWebSocketMessage();
-        message.data = data;
+        message.decodedData = decodedData;
+        message.encodedData = encodedData;
         message.socket = socket;
         return message;
     }
@@ -56,11 +58,19 @@ public class ZWebSocketMessageBuilder {
         return this;
     }
 
-    public byte[] getData() {
-        return data;
+    public byte[] getDecodedData() {
+        return decodedData;
     }
-    public ZWebSocketMessageBuilder setData(byte[] data) {
-        this.data = data;
+    public ZWebSocketMessageBuilder setDecodedData(byte[] decodedData) {
+        this.decodedData = decodedData;
+        return this;
+    }
+
+    public byte[] getEncodedData() {
+        return encodedData;
+    }
+    public ZWebSocketMessageBuilder setEncodedData(byte[] encodedData) {
+        this.encodedData = encodedData;
         return this;
     }
     
