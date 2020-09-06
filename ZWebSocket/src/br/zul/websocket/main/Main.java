@@ -10,7 +10,8 @@ import java.io.IOException;
 public class Main {
 
     public static void main(String[] args) throws IOException, ZWebSocketException {
-        Test.connectToWsServer("ws://localhost:3000");
+        //Test.connectToWsServer("ws://localhost:3000");
+        Test.connectToWsServer("wss://a910921c51dc.ngrok.io");
         //Test.startServerWsSimples();
     }
     

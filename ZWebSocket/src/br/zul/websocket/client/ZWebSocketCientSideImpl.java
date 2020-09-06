@@ -154,7 +154,7 @@ class ZWebSocketCientSideImpl implements ZWebSocket {
         if (getProtocol().equalsIgnoreCase(PROTOCOL_WS)){
             socket = new Socket(getHost(), getPort());
         } else {
-            socket = SSLSocketFactory.getDefault().createSocket();
+            socket = SSLSocketFactory.getDefault().createSocket(getHost(), getPort());
             ((SSLSocket)socket).startHandshake();
         }
         inputStream = socket.getInputStream();
